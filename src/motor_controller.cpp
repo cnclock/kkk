@@ -41,24 +41,18 @@ void MotorController::setFrequency(int frequency) {
     if (frequency > maxFrequency) frequency = maxFrequency;
     if (frequency <= 0) {
         // 停止定时器
-        HAL_TIM_Base_Stop_IT(htim);
+        HAL_TIM_PWM_Stop(htim, timerChannel);
         currentFrequency = 0;
         return;
     }
     
     currentFrequency = frequency;
     
-    // 计算自动重载值 (ARR)
-    uint32_t period = timerClockFreq / (htim->Init.Prescaler + 1) / frequency - 1;
-    
-    // 更新定时器周期
+    uint32_t period = 1000000 / frequency - 1;  // 基于1MHz时钟计算周期
     __HAL_TIM_SET_AUTORELOAD(htim, period);
-
-    // 随机化初始计数值，避免多电机同步
-    __HAL_TIM_SET_COUNTER(htim, rand() % (period + 1));
+    __HAL_TIM_SET_COMPARE(htim, timerChannel, period / 2);  // 50%占空比
     
-    // 启动定时器中断
-    HAL_TIM_Base_Start_IT(htim);
+    HAL_TIM_PWM_Start(htim, timerChannel);
 }
 
 void MotorController::startHome() {

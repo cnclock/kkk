@@ -1,14 +1,21 @@
 #include "config.h"
 #include "eeprom_manager.h"
 #include "motor_controller.h"
-#include "ultrasonic.h"
+//#include "ultrasonic.h"
 #include "button_handler.h"
 #include "led_handler.h"
 #include "lcd_display.h"
 #include "watchdog.h"
 #include "pid_controller.h"
-#include "stm32f1xx_hal.h"  // 添加HAL库头文件
+
+// 取消Error_Handler宏定义，避免与函数冲突
+#undef Error_Handler
+
+//#include "stm32f1xx_hal.h"  // 添加HAL库头文件  //已经在watchdog.h中包含
 #include <Ultrasonic.h>
+
+// 声明Error_Handler函数
+void Error_Handler(void);
 
 // 定时器句柄
 TIM_HandleTypeDef htim3;  // 假设使用TIM3
@@ -22,7 +29,7 @@ Ultrasonic ultrasonic2(US2_TRIG, US2_ECHO);    // An ultrasonic sensor HC-04
 ButtonHandler startButton(BUTTON_START);
 LEDHandler led(LED_DATA_PIN, 3);
 LCDDisplay lcd(lcdPins);
-Watchdog watchdog(WATCHDOG_TIMEOUT);
+Watchdog watchdog(2000); // 实例化看门狗
 //设置PID初始参数
 PIDController pid1(1.0, 0.1, 0.01, 100.0, 0.1); 
 PIDController pid2(1.0, 0.1, 0.01, 100.0, 0.1); 
@@ -35,75 +42,80 @@ void home();
 void run();
 void fault();
 
+
+void SystemClock_Config(void) {
+    RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+    RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+
+    /** 初始化RCC振荡器 
+    */
+    RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+    RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+    RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+    RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+    RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI_DIV2;
+    RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL9;
+    if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK) {
+        Error_Handler();
+    }
+    
+    /** 初始化RCC时钟 
+    */
+    RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+                                  |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+    RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+    RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+    RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
+    RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+
+    if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK) {
+        Error_Handler();
+    }
+}
+
+
+
 // 定时器初始化函数（基于频率控制）
 void TIM3_Init(void) {
-    TIM_ClockConfigTypeDef sClockSourceConfig = {0};
-    TIM_MasterConfigTypeDef sMasterConfig = {0};
-
+    TIM_OC_InitTypeDef sConfigOC = {0};
+    
     htim3.Instance = TIM3;
-    htim3.Init.Prescaler = 72 - 1;      // 72MHz / 72 = 1MHz时钟
-    htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-    htim3.Init.Period = 1000 - 1;       // 初始频率1kHz (1MHz/1000)
-    htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-    if (HAL_TIM_Base_Init(&htim3) != HAL_OK) {
+    htim3.Init.Prescaler = 72 - 1;      // 1MHz时钟
+    htim3.Init.Period = 1000 - 1;       // 1kHz频率
+    if (HAL_TIM_PWM_Init(&htim3) != HAL_OK) {
         Error_Handler();
     }
     
-    sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-    if (HAL_TIM_ConfigClockSource(&htim3, &sClockSourceConfig) != HAL_OK) {
+    sConfigOC.OCMode = TIM_OCMODE_PWM1;
+    sConfigOC.Pulse = 500;  // 50%占空比
+    sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+    if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_1) != HAL_OK) {
         Error_Handler();
     }
     
-    sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-    sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-    if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK) {
-        Error_Handler();
-    }
-
-    // 启动TIM3
-    HAL_TIM_Base_Start_IT(&htim3); // 启用定时器中断
+    HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
 }
 
 void TIM4_Init(void) {
-    TIM_ClockConfigTypeDef sClockSourceConfig = {0};
-    TIM_MasterConfigTypeDef sMasterConfig = {0};
-
+    TIM_OC_InitTypeDef sConfigOC = {0};
+    
     htim4.Instance = TIM4;
-    htim4.Init.Prescaler = 72 - 1;      // 72MHz / 72 = 1MHz时钟
-    htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
-    htim4.Init.Period = 1000 - 1;       // 初始频率1kHz
-    htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-    if (HAL_TIM_Base_Init(&htim4) != HAL_OK) {
+    htim4.Init.Prescaler = 72 - 1;      // 1MHz时钟
+    htim4.Init.Period = 1000 - 1;       // 1kHz频率
+    if (HAL_TIM_PWM_Init(&htim4) != HAL_OK) {
         Error_Handler();
     }
     
-    sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-    if (HAL_TIM_ConfigClockSource(&htim4, &sClockSourceConfig) != HAL_OK) {
+    sConfigOC.OCMode = TIM_OCMODE_PWM1;
+    sConfigOC.Pulse = 500;  // 50%占空比
+    sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+    if (HAL_TIM_PWM_ConfigChannel(&htim4, &sConfigOC, TIM_CHANNEL_1) != HAL_OK) {
         Error_Handler();
     }
     
-    sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-    sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-    if (HAL_TIMEx_MasterConfigSynchronization(&htim4, &sMasterConfig) != HAL_OK) {
-        Error_Handler();
-    }
-
-    // 启动TIM4
-    HAL_TIM_Base_Start_IT(&htim4); // 启用定时器中断
+    HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
 }
 
-// 添加TIM3和TIM4的中断服务函数
-extern "C" {
-    void TIM3_IRQHandler(void) {
-        MotorController::handleTIM3Interrupt();
-        __HAL_TIM_CLEAR_IT(&htim3, TIM_IT_UPDATE); // 清除中断标志
-    }
-
-    void TIM4_IRQHandler(void) {
-        MotorController::handleTIM4Interrupt();
-        __HAL_TIM_CLEAR_IT(&htim4, TIM_IT_UPDATE); // 清除中断标志
-    }
-}
 
 void home() {
     Serial2.println("电机回零... ");
@@ -147,6 +159,8 @@ void fault() {
 
 void setup() {
     currentState = STATE_HOMING;
+    HAL_Init();  // 添加HAL库初始化
+    SystemClock_Config();  // 系统时钟配置
     Serial.begin(9600);
     Serial2.begin(9600);
     led.setColor(0, 64, 0, 0);
@@ -158,7 +172,7 @@ void setup() {
     
     // 初始化看门狗
     Serial2.print("初始化看门狗... ");
-    watchdog.start();
+    watchdog.start(); 
     Serial2.println("OK.");
     
     // 初始化电机控制器

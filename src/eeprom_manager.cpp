@@ -12,14 +12,14 @@ bool EEPROMManager::writeData(const uint8_t* data, size_t size) {
     return true;
 }
 
+// eeprom_manager.cpp
 bool EEPROMManager::readData(uint8_t* data, size_t size) {
-    // 读取数据和CRC
-    uint32_t readCRC;
+    uint32_t storedCRC;
+    // 从EEPROM读取存储的CRC
+    // 示例: EEPROM.get(address, storedCRC);
+    
     uint32_t calculatedCRC = calculateCRC32(data, size);
-    if (readCRC == calculatedCRC) {
-        return true;
-    }
-    return false;
+    return (storedCRC == calculatedCRC);
 }
 
 uint32_t EEPROMManager::calculateCRC32(const uint8_t* data, size_t size) {

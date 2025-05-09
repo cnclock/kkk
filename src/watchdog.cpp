@@ -1,20 +1,25 @@
+// watchdog.cpp
 #include "watchdog.h"
+#include "stm32f1xx_hal.h"
 
-void Watchdog::setup(uint32_t timeout_ms) {
-    // 配置看门狗
+IWDG_HandleTypeDef hiwdg;  // 添加全局句柄
+
+Watchdog::Watchdog(uint32_t timeout)
+    : timeout(timeout), lastFeedTime(0) {}
+
+void Watchdog::start() {
     hiwdg.Instance = IWDG;
-    hiwdg.Init.Prescaler = IWDG_PRESCALER_64; // 设置预分频器（64）
-    hiwdg.Init.Reload = (timeout_ms * 40) / 64; // 计算重装载值，40kHz 时钟
-
-    // 初始化看门狗
+    hiwdg.Init.Prescaler = IWDG_PRESCALER_64;
+    hiwdg.Init.Reload = timeout / 2;  // 假设超时单位为ms
     if (HAL_IWDG_Init(&hiwdg) != HAL_OK) {
-        // 如果初始化失败，可以添加错误处理
-        Serial.println("看门狗初始化失败！");
-        //while (1); // 停止程序
+        Error_Handler();
     }
+    lastFeedTime = millis();
 }
 
 void Watchdog::feed() {
-    // 喂狗
-    HAL_IWDG_Refresh(&hiwdg);
+    if (HAL_IWDG_Refresh(&hiwdg) != HAL_OK) {
+        Error_Handler();
+    }
+    lastFeedTime = millis();
 }

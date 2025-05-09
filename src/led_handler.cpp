@@ -12,35 +12,24 @@ void LEDHandler::setColor(uint8_t i, uint8_t r, uint8_t g, uint8_t b) {
 }
 
 // 定义LEDHandler类的成员函数breatheEffect，用于实现LED灯的呼吸效果
+// led_handler.cpp
 void LEDHandler::breatheEffect(uint8_t i, uint8_t r, uint8_t g, uint8_t b) {
-    // 静态变量brightness用于存储当前亮度值，初始值为0
-    static uint8_t brightness = 0;
-    // 静态变量increasing用于指示亮度是否正在增加，初始值为true
-    static bool increasing = true;
-
-    // 如果当前亮度正在增加
-    if (increasing) {
-        // 亮度值增加1
-        brightness++;
-        // 如果亮度值达到最大值255，则改变方向，开始减少亮度
-        if (brightness >= 255) {
-            increasing = false;
-        }
+    static uint8_t brightness[256] = {0};  // 为每个LED创建独立状态
+    static bool increasing[256] = {true};
+    
+    if (increasing[i]) {
+        brightness[i]++;
+        if (brightness[i] >= 255) increasing[i] = false;
     } else {
-        // 亮度值减少1
-        brightness--;
-        // 如果亮度值降到最小值0，则改变方向，开始增加亮度
-        if (brightness <= 0) {
-            increasing = true;
-        }
+        brightness[i]--;
+        if (brightness[i] <= 0) increasing[i] = true;
     }
-
-    // 遍历LED灯带的所有像素点
-    for (uint16_t i = 0; i < strip.numPixels(); i++) {
-        // 设置当前像素点的颜色，颜色值根据当前亮度进行线性缩放
-        strip.setPixelColor(i, strip.Color(r * brightness / 255, g * brightness / 255, b * brightness / 255));
-    }
-    // 更新LED灯带显示
+    
+    strip.setPixelColor(i, strip.Color(
+        r * brightness[i] / 255, 
+        g * brightness[i] / 255, 
+        b * brightness[i] / 255
+    ));
     strip.show();
 }
 
