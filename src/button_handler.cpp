@@ -7,20 +7,21 @@ ButtonHandler::ButtonHandler(uint8_t pin)
 
 bool ButtonHandler::isPressed() {
     bool reading = digitalRead(pin);
-    
-    // 检测状态变化
+
+    // 如果按键状态发生变化，更新去抖时间
     if (reading != lastState) {
         lastDebounceTime = millis();
+        lastState = reading; // 始终更新 lastState
     }
-    
-    // 防抖处理
-    if ((millis() - lastDebounceTime) > 50) {
-        if (reading != lastState) {
-            lastState = reading;
-            // 返回按下事件（下降沿）
-            return (lastState == LOW);
+    //Serial2.println("Button state: " + String(reading));
+    //Serial2.println("Last state: " + String(lastState));
+    //Serial2.println("pin: " + String(pin));
+    // 如果超过去抖延时，确认按键状态
+    if ((millis() - lastDebounceTime) > 20) { // 去抖延时为 20ms
+        if (lastState == LOW) { // 如果按键当前状态为 LOW，表示按下
+            return true;
         }
     }
-    
+
     return false;
 }

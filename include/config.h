@@ -75,8 +75,8 @@ PC15 - MOTOR2_EN    //已使用
 #define MOTOR2_DIR_PIN       PA4
 #define MOTOR2_EN_PIN        PC15
 
-#define LIMIT_SW1_NEG        PB0    // 电机1负限位开关
-#define LIMIT_SW2_NEG        PB5    // 电机2负限位开关
+#define LIMIT_SW1_NEG        PA9     // 电机1负限位开关
+#define LIMIT_SW2_NEG        PA10    // 电机2负限位开关
 #define BUTTON_START         PC13   // 启动按钮
 
 #define US1_TRIG             PB9    // 超声波1触发
@@ -100,14 +100,16 @@ const uint8_t lcdPins[6] = {PC0, PC1, PC2, PC3, PC4, PC5};
 #define FORWARD              HIGH   // 正方向
 #define BACKWARD             LOW    // 负方向
 #define HOME_DIRECTION       BACKWARD  // 根据限位开关位置选择
-#define HOME_FREQUENCY       300    // 回原点速度
+#define HOME_FREQUENCY       4000    // 回原点速度
 
 
 
 // 系统参数
-const float TARGET_DISTANCE = 10.0;  // 目标距离10cm
-const float SAFETY_DISTANCE = 50.0;  // 安全阈值50cm
-const uint16_t MAX_STEPS = 1000;     // 最大步数限制
+const float TARGET_DISTANCE  = 50.0;  // 目标距离10cm
+const float SAFETY_DISTANCE  = 80.0;  // 安全阈值50cm
+const uint16_t MAX_STEPS     = 1000;  // 最大步数限制
+const uint16_t MAX_FREQUENCY = 9000;  // 最大频率限制
+
 const uint32_t WATCHDOG_TIMEOUT = 256; // 看门狗超时时间(ms)
 
 // EEPROM配置

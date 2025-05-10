@@ -3,6 +3,7 @@
 
 #include "config.h"
 #include "pid_controller.h"
+#include "button_handler.h"
 
 class PIDController; // 前向声明
 
@@ -29,7 +30,7 @@ public:
     // 处理TIM4中断
     static void handleTIM4Interrupt();
 private:
-    uint8_t limPin;
+    //uint8_t limPin;
     uint8_t pwmPin;
     uint8_t dirPin;
     uint8_t enPin;
@@ -39,6 +40,6 @@ private:
     int maxFrequency;  // 最大频率 (Hz)
     int currentFrequency;
     uint32_t timerClockFreq;  // 定时器时钟频率 (Hz)
+    ButtonHandler limPin; 
 };
-
 #endif // MOTOR_CONTROLLER_H

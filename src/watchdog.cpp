@@ -12,6 +12,7 @@ void Watchdog::start() {
     hiwdg.Init.Prescaler = IWDG_PRESCALER_64;
     hiwdg.Init.Reload = timeout / 2;  // 假设超时单位为ms
     if (HAL_IWDG_Init(&hiwdg) != HAL_OK) {
+        Serial2.println("Watchdog initialization failed!");
         Error_Handler();
     }
     lastFeedTime = millis();
@@ -19,6 +20,7 @@ void Watchdog::start() {
 
 void Watchdog::feed() {
     if (HAL_IWDG_Refresh(&hiwdg) != HAL_OK) {
+        Serial2.println("Watchdog feed failed!");
         Error_Handler();
     }
     lastFeedTime = millis();
