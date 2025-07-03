@@ -99,5 +99,6 @@
   "files.associations": {
     "newlib.h": "c",
     "_newlib_version.h": "c"
-  }
+  },
+  "Codegeex.RepoIndex": true
 }
