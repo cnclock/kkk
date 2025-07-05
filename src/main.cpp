@@ -9,7 +9,7 @@
 #include "MultiPwm.h"
 #include <Ultrasonic.h>
 
-// 取消Error_Handler宏定义，避免与函数冲突
+// 取消Error_Handler宏定义，避免与函数冲突 
 #undef Error_Handler
 
 // 实例化对象
@@ -26,8 +26,9 @@ ButtonHandler startButton(BUTTON_START);
 LEDHandler led(LED_DATA_PIN, 3);
 Watchdog watchdog(2000); // 实例化看门狗
 //设置PID初始参数，包括比例系数kp，积分系数ki，微分系数kd，积分限制integralLimit，采样时间sampleTime
-PIDController pid1(10.0, 0.05, 0.03, 100.0, 0.1);
-PIDController pid2(10.0, 0.05, 0.03, 100.0, 0.1);
+PIDController pid0(3.0, 0.0, 0.0, 100.0, 0.1);
+PIDController pid1(12.0, 0.03, 0.02, 100.0, 0.1);
+PIDController pid2(12.0, 0.03, 0.02, 100.0, 0.1);
 float Kc = 0.5;                 // 交叉耦合系数
 float e_couple;
 bool isRunning = false; // 是否运行标志
@@ -39,25 +40,22 @@ void Error_Handler(void); // 函数声明
 void home();
 void run();
 void fault();
-void move(bool isMove);
-void brush(bool isBrushOn);
+void move(bool isMove, bool isBrushOn, bool isStable);
 void feedWatchdog();
 void printDebug(const String &message); // 用于打印调试信息
 bool checkTimeElapsed(unsigned long &lastTime, unsigned long interval); // 检查时间是否已经过去
 
-
 void GPIO_Init() {
-
-   pinMode(BRUSH_PIN, OUTPUT_OPEN_DRAIN); // 设置继电器引脚为开漏输出模式
+   //pinMode(BRUSH_PIN, OUTPUT_OPEN_DRAIN); // 设置继电器引脚为开漏输出模式
+   pinMode(BRUSH_PIN, OUTPUT); // 设置继电器引脚为推挽输出模式
    digitalWrite(BRUSH_PIN, HIGH); // 设置继电器高电平
-
 }
 
 void home() {
+    feedWatchdog();
+
     static bool motor1OkPrinted = false;
     static bool motor2OkPrinted = false;
-
-    feedWatchdog();
 
     // 处理电机回零
     auto processMotorHoming = [](MotorController &motor, bool &motorOkPrinted, const char* motorName) {
@@ -84,13 +82,12 @@ void home() {
 }
 
 void run() {
-    bool isBrushOn = false; // 是否刷子开启标志
-    bool isMove = true; // 是否移动标志
-    static bool isStable = false; // 是否稳态标志
-    static uint8_t stableCount = 0; // 稳态计数器
-    
     feedWatchdog();
-    static unsigned long lastFeedButtonTime = millis();
+
+    static bool isBrushOn = false;  // 是否刷子电机开启标志
+    static bool isMove = true;      // 是否移动标志
+    static bool isStable = false;   // 是否稳态标志
+    static uint8_t stableCount = 0; // 稳态计数器
 
     // 读取所有超声波传感器数据
     float distance1 = ultrasonic1.read();
@@ -99,34 +96,21 @@ void run() {
     float distance4 = ultrasonic4.read();
     
     // 检查安全距离
-    bool isSafetyViolated = distance1 > SAFETY_DISTANCE || 
-                          distance2 > SAFETY_DISTANCE || 
-                          distance3 > SAFETY_DISTANCE || 
-                          distance4 > SAFETY_DISTANCE;
-    
-    if (isSafetyViolated) {
-        printDebug("UltrasonicSensor");
-        printDebug("Error! > SAFETY_DISTANCE");
-        printDebug("distance1: " + String(distance1) +
-                  ", distance2: " + String(distance2) +
-                  ", distance3: " + String(distance3) +
-                  ", distance4: " + String(distance4));
-        currentState = STATE_FAULT;
-        return;
-    }
 
     // 检测是否在启动距离范围内
     bool isWithinStartDistance = (distance1 < START_DISTANCE || distance2 < START_DISTANCE) && 
                                (distance3 < START_DISTANCE || distance4 < START_DISTANCE);
-                               
-    isRunning = isWithinStartDistance;
-    isMove = !isWithinStartDistance;
 
-    float distanceA = min(distance1, distance2);
-    float distanceB = min(distance3, distance4);
-    e_couple = Kc * (distanceA - distanceB);
+    isRunning = isWithinStartDistance;
+    // 确保系统总是处于移动状态
+    isMove = true;
 
     if (isRunning) {
+
+        float distanceA = min(distance1, distance2);
+        float distanceB = min(distance3, distance4);
+        e_couple = Kc * (distanceA - distanceB);
+
         motor1.run(distanceA + e_couple, pid1);
         motor2.run(distanceB - e_couple, pid2);
         
@@ -140,9 +124,11 @@ void run() {
         } else {
             isBrushOn = false;
             isMove = false;
+
         }
         
         // 检查是否按下复位按钮
+        static unsigned long lastFeedButtonTime = millis();
         if (startButton.isPressed()) {
             if (millis() - lastFeedButtonTime > 1000) {
                 printDebug("Resetting...");
@@ -153,50 +139,80 @@ void run() {
     } else {
         motor1.stop();
         motor2.stop();
-        isMove = true;
+        isMove = true; // 停止时仍然允许移动
     }
     
-    move(isMove); // 调用移动函数
-    brush(isBrushOn); // 调用刷子控制函数
+    move(isMove, isBrushOn, isStable); // 调用移动函数
     
-    // 检测稳态错误
-    float distanceDifference = abs(distance1 + distance2 - distance3 - distance4);
-    if (isStable && (distanceDifference > 50)) {
-        stableCount++;
+    // 检测到达终点后复位系统
+
+    if (isStable && ((distance1 > TARGET_DISTANCE +10 && distance2 > TARGET_DISTANCE +10) || (distance3 > TARGET_DISTANCE +10 && distance4 > TARGET_DISTANCE +10))) {
+        static unsigned long lastFeedDelayTime = millis();
+        if (checkTimeElapsed(lastFeedDelayTime, 200)) {
+            stableCount++;
+            lastFeedDelayTime = millis();
+        }        
         if (stableCount >= STABLE_COUNT) {
-            printDebug(String(distanceDifference) + " Error! > 50mm");
+            printDebug("到达终点，结束。");
             NVIC_SystemReset(); // 复位系统
         }
     }
 }
 
-void brush(bool isBrushOn) {
-    static unsigned long lastFeedDelayTime = millis();
+void move(bool isMove, bool isBrushOn, bool isStable) {
     feedWatchdog();
-    
-    if (isBrushOn) {
-        digitalWrite(BRUSH_PIN, LOW); 
-    } else {
-        if (checkTimeElapsed(lastFeedDelayTime, 2000)) {
-            digitalWrite(BRUSH_PIN, HIGH);
-            lastFeedDelayTime = millis();
-        }
-    }
-}
 
-void move(bool isMove) {
-    static unsigned long lastFeedDelayTime = millis();
-    feedWatchdog();
-    
+    float moveSpeed = isStable ? MOVE_SPEED : MOVE_SPEED * 2;
+    static unsigned long lastMoveTime = millis();
+    static bool isDelayOne = true;
+    static bool isFirstMove = true; // 新增：第一次移动标志
+    static bool wasMoving = false;  // 新增：记录上一次的移动状态
+
+    // 检测从移动到停止的状态切换
+    if (wasMoving && !isMove) {
+        lastMoveTime = millis();  // 重置时间，保证在到达终点后不会立即停止行走
+    }
+    wasMoving = isMove;  // 更新状态
+
+    // 刷子控制
+    static unsigned long lastBrushTime = millis();
+    if (isBrushOn) {
+        digitalWrite(BRUSH_PIN, LOW);
+    } else if (checkTimeElapsed(lastBrushTime, 2000)) {
+        digitalWrite(BRUSH_PIN, HIGH);
+        lastBrushTime = millis();
+    }
+
     if (isMove) {
-        motor3.run(TARGET_DISTANCE - MOVE_SPEED, pid1); // 行走电机3运行
-        motor4.run(TARGET_DISTANCE + MOVE_SPEED, pid2); // 行走电机4运行
+        if (isFirstMove && isBrushOn) {
+            // 第一次移动时延时启动
+            if (checkTimeElapsed(lastMoveTime, 1000)) { // 延时1秒
+                isFirstMove = false;
+                lastMoveTime = millis();
+            }
+            // 延时期间仍然执行移动，但使用较小的速度
+            motor3.run(TARGET_DISTANCE - moveSpeed * 0.5, pid0);
+            motor4.run(TARGET_DISTANCE + moveSpeed * 0.5, pid0);
+            return;
+        }
+        motor3.run(TARGET_DISTANCE - moveSpeed, pid0);
+        motor4.run(TARGET_DISTANCE + moveSpeed, pid0);
     } else {
-        if (checkTimeElapsed(lastFeedDelayTime, 4000)) {
-            motor3.stop();
-            motor4.stop();
-            lastFeedDelayTime = millis();
-        }        
+        if (isDelayOne)
+        {
+            if (checkTimeElapsed(lastMoveTime, 500)) {
+                motor3.run(TARGET_DISTANCE - MOVE_SPEED * 0.3, pid0);
+                motor4.run(TARGET_DISTANCE + MOVE_SPEED * 0.3, pid0);
+                lastMoveTime = millis();
+                isDelayOne = false;
+            }
+        } else {
+            if (checkTimeElapsed(lastMoveTime, 2000)) {
+                motor3.run(TARGET_DISTANCE - MOVE_SPEED * 0.05, pid0);
+                motor4.run(TARGET_DISTANCE + MOVE_SPEED * 0.05, pid0);
+                lastMoveTime = millis();
+            }
+        }
     }
 }
 

@@ -33,28 +33,23 @@ const u_int8_t  EN_PINS[4] = {PA4, PA5, PB5, PA10};
 #define LED_NUM              3         // WS2812B灯珠数量
 #define BRUSH_PIN            PB11     // 继电器控制引脚
 
-
-
-
 #define EN_LEVEL             HIGH   // 使能引脚电平
 #define UNEN_LEVEL           LOW    // 非使能引脚电平
 #define FORWARD              HIGH   // 正方向
 #define BACKWARD             LOW    // 负方向
 #define HOME_DIRECTION       BACKWARD  // 根据限位开关位置选择
-#define HOME_FREQUENCY       4000    // 回原点速度
-#define MOVE_SPEED           10       // 行走电机速度，以距离差值为比例单位
-
-
+#define HOME_FREQUENCY       6000    // 回原点速度
+#define MOVE_SPEED           15       // 行走电机速度，以距离差值为比例单位
 
 // 系统参数
-const float TARGET_DISTANCE  = 7;   // 目标距离cm
+const float TARGET_DISTANCE  = 8;   // 目标距离cm
 const float START_DISTANCE   = 60;  // 起始距离cm
 const float STABLE_DISTANCE  = 3;   // 稳态距离cm
 const u_int16_t STABLE_TIME  = 1000; // 稳态时间ms
-const u_int8_t STABLE_COUNT    = 3;   // 稳态计数
+const u_int8_t STABLE_COUNT    = 3;   // 稳态计数，用于判断是否到达结束位置
 const float SAFETY_DISTANCE  = 300;   // 安全阈值300cm
 const u_int32_t MAX_STEPS     = 19000000;  // 最大步数限制
-const u_int16_t MAX_FREQUENCY = 7500;  // 最大频率限制
+const u_int16_t MAX_FREQUENCY = 8000;  // 最大频率限制
 
 const u_int32_t WATCHDOG_TIMEOUT = 256; // 看门狗超时时间(ms)
 
